@@ -1,0 +1,368 @@
+Here's a step-by-step guide to schedule a JMeter test case to run every 1 hour and store the results in a file using Windows Task Scheduler:
+
+✅ Prerequisites:
+Apache JMeter installed (e.g., C:\apache-jmeter-5.5\bin\jmeter.bat)
+
+A valid JMeter test plan (test.jmx)
+
+Create a folder to store test results (e.g., C:\jmeter-results)
+
+📝 Create a JMeter Run Script
+Create a batch file named run_jmeter.bat and save it somewhere safe (e.g., C:\jmeter-scripts\run_jmeter.bat):
+
+@echo off
+set JMETER_HOME=C:\apache-jmeter-5.5\bin
+set TEST_PLAN=C:\jmeter-tests\test.jmx
+set RESULT_DIR=C:\jmeter-results
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%time:~0,2%-%time:~3,2%
+
+:: Remove leading space in hour (e.g., " 9" to "09")
+set HOUR=%time:~0,2%
+if "%HOUR:~0,1%"==" " set HOUR=0%HOUR:~1%
+
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%HOUR%-%time:~3,2%
+
+"%JMETER_HOME%\jmeter.bat" -n -t "%TEST_PLAN%" -l "%RESULT_DIR%\result_%TIMESTAMP%.jtl"
+
+
+
+
+
+
+This batch file:
+
+Runs JMeter in non-GUI mode (-n)
+
+Executes your test plan (-t)
+
+Saves the result in a timestamped .jtl file (-l)
+
+
+
+
+⏰ Schedule with Windows Task Scheduler
+Open Task Scheduler (Win + S → search "Task Scheduler")
+
+Click "Create Basic Task..."
+
+Name: e.g., Run JMeter Test Every Hour
+
+Trigger: Select Daily
+
+Set Start time (e.g., 00:00 AM)
+
+Recur every 1 day
+
+Repeat task every:
+
+Click "Open the Properties dialog for this task when I click Finish"
+
+Action: Start a Program
+
+Program/script: C:\jmeter-scripts\run_jmeter.bat
+
+Click Finish, then in the Properties window:
+
+Go to Triggers tab → Edit your trigger
+
+Check Repeat task every 1 hour
+
+Duration: 1 day
+
+Press OK
+
+✅ Optional: Log JMeter Summary Report
+You can enhance the batch to include summary output:
+
+"%JMETER_HOME%\jmeter.bat" -n -t "%TEST_PLAN%" -l "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -j "%RESULT_DIR%\log_%TIMESTAMP%.log"
+
+Now you'll have both:
+
+.jtl for performance result analysis
+
+.log for execution details
+
+
+
+Perfect! Let’s generate an HTML report from the .jtl file using JMeter’s built-in reporting tool.
+
+✅ Modify Your Batch File to Include Report Generation
+Update your run_jmeter.bat with these lines after the .jtl file is created:
+
+
+
+@echo off
+set JMETER_HOME=C:\apache-jmeter-5.5\bin
+set TEST_PLAN=C:\jmeter-tests\test.jmx
+set RESULT_DIR=C:\jmeter-results
+set REPORT_DIR=C:\jmeter-reports
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%time:~0,2%-%time:~3,2%
+
+:: Fix time formatting
+set HOUR=%time:~0,2%
+if "%HOUR:~0,1%"==" " set HOUR=0%HOUR:~1%
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%HOUR%-%time:~3,2%
+
+:: Run JMeter and generate result JTL
+"%JMETER_HOME%\jmeter.bat" -n -t "%TEST_PLAN%" -l "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -j "%RESULT_DIR%\log_%TIMESTAMP%.log"
+
+:: Generate HTML report from JTL
+"%JMETER_HOME%\jmeter.bat" -g "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -o "%REPORT_DIR%\report_%TIMESTAMP%"
+
+
+
+
+This will:
+
+Create the .jtl and .log result files in C:\jmeter-results
+
+Generate a HTML report in C:\jmeter-reports\report_<timestamp>
+
+
+
+
+📂 Folder Setup Checklist
+Make sure these folders exist:
+
+C:\jmeter-tests\ → for your .jmx file
+
+C:\jmeter-results\ → for .jtl and .log
+
+C:\jmeter-reports\ → for HTML reports
+
+
+
+📦 Output Example
+After one run, you’ll have:
+
+C:\jmeter-results\result_2025-04-23_19-00.jtl
+
+C:\jmeter-reports\report_2025-04-23_19-00\index.html (open this in a browser)
+
+
+
+
+Great! Let’s add email functionality so that the HTML report is automatically emailed after every JMeter run.
+
+We’ll use PowerShell (built into Windows) for this. You'll need:
+
+SMTP details (like Gmail or company SMTP)
+
+A sender email & password or app password (Gmail now needs App Passwords for 3rd-party apps)
+
+✅ Step 1: PowerShell Script to Send Email
+Create a file named send_email.ps1 inside your C:\jmeter-scripts\ folder:
+
+
+param (
+    [string]$reportPath,
+    [string]$timestamp
+)
+
+# Configuration
+$smtpServer = "smtp.gmail.com"
+$smtpPort = 587
+$sender = "your_email@gmail.com"
+$recipient = "recipient_email@example.com"
+$password = "your_app_password"  # Gmail app password recommended
+
+$subject = "JMeter Report - $timestamp"
+$body = "Hi,`n`nPlease find attached the JMeter performance report generated on $timestamp.`n`nRegards,`nJMeter Scheduler"
+
+$attachment = "$reportPath\index.html"
+
+Send-MailMessage -From $sender -To $recipient -Subject $subject -Body $body `
+    -SmtpServer $smtpServer -Port $smtpPort -UseSsl `
+    -Credential (New-Object PSCredential($sender, (ConvertTo-SecureString $password -AsPlainText -Force))) `
+    -Attachments $attachment
+
+
+✅ Step 2: Update run_jmeter.bat to Call PowerShell
+After generating the report, add this line at the end of run_jmeter.bat:
+
+:: Send report via email
+powershell.exe -ExecutionPolicy Bypass -File "C:\jmeter-scripts\send_email.ps1" -reportPath "%REPORT_DIR%\report_%TIMESTAMP%" -timestamp "%TIMESTAMP%"
+
+✅ Final run_jmeter.bat Summary
+@echo off
+set JMETER_HOME=C:\apache-jmeter-5.5\bin
+set TEST_PLAN=C:\jmeter-tests\test.jmx
+set RESULT_DIR=C:\jmeter-results
+set REPORT_DIR=C:\jmeter-reports
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%time:~0,2%-%time:~3,2%
+
+set HOUR=%time:~0,2%
+if "%HOUR:~0,1%"==" " set HOUR=0%HOUR:~1%
+set TIMESTAMP=%date:~10,4%-%date:~4,2%-%date:~7,2%_%HOUR%-%time:~3,2%
+
+:: Run test
+"%JMETER_HOME%\jmeter.bat" -n -t "%TEST_PLAN%" -l "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -j "%RESULT_DIR%\log_%TIMESTAMP%.log"
+
+:: Generate report
+"%JMETER_HOME%\jmeter.bat" -g "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -o "%REPORT_DIR%\report_%TIMESTAMP%"
+
+:: Send email with HTML report
+powershell.exe -ExecutionPolicy Bypass -File "C:\jmeter-scripts\send_email.ps1" -reportPath "%REPORT_DIR%\report_%TIMESTAMP%" -timestamp "%TIMESTAMP%"
+
+✅ Notes:
+🔒 For Gmail, turn on 2FA and use an App Password.
+
+Make sure PowerShell script execution is allowed. Use this once in an admin PowerShell:,
+Set-ExecutionPolicy RemoteSigned
+
+
+
+
+
+
+
+Perfect. Let's send the HTML report, .jtl, and .log files via Outlook (no SMTP setup needed 🎉). We'll use the Outlook COM object built into Windows.
+
+✅ Step 1: Updated PowerShell Script (send_outlook_email.ps1)
+Save this as C:\jmeter-scripts\send_outlook_email.ps1:
+
+param (
+    [string]$timestamp,
+    [string]$reportPath,
+    [string]$jtlPath,
+    [string]$logPath
+)
+
+$recipient = "recipient_email@example.com"
+$subject = "JMeter Report - $timestamp"
+$body = "Hi,<br><br>Please find attached the JMeter test report, .jtl, and log file for $timestamp.<br><br>Regards,<br>JMeter Scheduler"
+
+# Create Outlook COM Object
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.CreateItem(0)
+
+$mail.Subject = $subject
+$mail.To = $recipient
+$mail.HTMLBody = $body
+
+# Attach files
+$mail.Attachments.Add("$reportPath\index.html")
+$mail.Attachments.Add($jtlPath)
+$mail.Attachments.Add($logPath)
+
+# Send the email
+$mail.Send()
+
+💡 Outlook must be installed and configured on the machine. This will use your Outlook account automatically.
+
+✅ Step 2: Update Your run_jmeter.bat File
+Here’s the updated section at the end of your batch script:
+
+:: Send email via Outlook with all files
+powershell.exe -ExecutionPolicy Bypass -File "C:\jmeter-scripts\send_outlook_email.ps1" -timestamp "%TIMESTAMP%" ^
+ -reportPath "%REPORT_DIR%\report_%TIMESTAMP%" ^
+ -jtlPath "%RESULT_DIR%\result_%TIMESTAMP%.jtl" ^
+ -logPath "%RESULT_DIR%\log_%TIMESTAMP%.log"
+
+✅ Full Batch Summary (last few lines):
+
+:: Generate report
+"%JMETER_HOME%\jmeter.bat" -g "%RESULT_DIR%\result_%TIMESTAMP%.jtl" -o "%REPORT_DIR%\report_%TIMESTAMP%"
+
+:: Send email via Outlook with report + JTL + LOG
+powershell.exe -ExecutionPolicy Bypass -File "C:\jmeter-scripts\send_outlook_email.ps1" -timestamp "%TIMESTAMP%" ^
+ -reportPath "%REPORT_DIR%\report_%TIMESTAMP%" ^
+ -jtlPath "%RESULT_DIR%\result_%TIMESTAMP%.jtl" ^
+ -logPath "%RESULT_DIR%\log_%TIMESTAMP%.log"
+
+✅ Example Output
+When scheduled:
+
+JMeter runs every 1 hour ✅
+
+.jtl, .log, and full HTML report generated ✅
+
+Email auto-sent via Outlook with all 3 files ✅
+
+
+
+
+
+and i want Add pass/fail summary in the email body?
+
+
+ChatGPT said:
+Excellent! Let’s extract pass/fail summary from the .jtl file and include it in the Outlook email body. We’ll do this by parsing the .jtl file using PowerShell.
+
+✅ Step 1: Update PowerShell Script to Include Pass/Fail Summary
+Update your send_outlook_email.ps1 to:
+
+param (
+    [string]$timestamp,
+    [string]$reportPath,
+    [string]$jtlPath,
+    [string]$logPath
+)
+
+$recipient = "recipient_email@example.com"
+$subject = "JMeter Report - $timestamp"
+
+# ===== Summary Calculation =====
+[xml]$jtlData = Get-Content $jtlPath
+$total = 0
+$passed = 0
+$failed = 0
+
+Select-String -Path $jtlPath -Pattern "<httpSample|<sample" | ForEach-Object {
+    $total++
+    if ($_ -like '*s="true"*') {
+        $passed++
+    } else {
+        $failed++
+    }
+}
+
+# ===== Compose Email Body =====
+$body = @"
+Hi,<br><br>
+Please find attached the JMeter report, .jtl, and log file for <b>$timestamp</b>.<br><br>
+
+<b>Execution Summary:</b><br>
+- Total Requests: <b>$total</b><br>
+- Passed: <b style='color:green;'>$passed</b><br>
+- Failed: <b style='color:red;'>$failed</b><br><br>
+
+Regards,<br>
+JMeter Scheduler
+"@
+
+# ===== Send Email via Outlook =====
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.CreateItem(0)
+
+$mail.Subject = $subject
+$mail.To = $recipient
+$mail.HTMLBody = $body
+
+$mail.Attachments.Add("$reportPath\index.html")
+$mail.Attachments.Add($jtlPath)
+$mail.Attachments.Add($logPath)
+
+$mail.Send()
+
+
+✅ Step 2: Ensure .jtl File Has <sample> or <httpSample> Entries
+If you're using a CSV .jtl, modify the script to read and parse CSV (I can help with that too). Otherwise, ensure your .jtl output format is XML, which is the default when using -l without -Jjmeter.save.saveservice.output_format=csv.
+
+✅ Final Output Email
+Your Outlook email will look like:
+
+Subject: JMeter Report - 2025-04-23_19-00
+Body:
+
+Hi,
+
+Please find attached the JMeter report, .jtl, and log file for 2025-04-23_19-00.
+
+Execution Summary:
+- Total Requests: 120
+- Passed: 117
+- Failed: 3
+
+Regards,  
+JMeter Scheduler
