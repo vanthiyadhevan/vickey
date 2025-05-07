@@ -1,6 +1,9 @@
 pipeline {
     agent any
 
+    tools {
+        git 'gitcli'
+    }
     environment {
         GITHUB_TOKEN = credentials('github') // GitHub token as Jenkins credential
         GITHUB_REPO = credentials('repo_url') // Repository URL as Jenkins credential
