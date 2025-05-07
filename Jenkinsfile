@@ -19,6 +19,7 @@ pipeline {
                     // Ensure GitHub CLI is installed and authenticated
                     sh '''
                         echo "Authenticating GitHub CLI..."
+                        sudo apt-get update && sudo apt-get install gh -y
                         echo $GITHUB_TOKEN | gh auth login --with-token
 
                         # Check if authentication succeeded
